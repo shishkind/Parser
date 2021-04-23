@@ -3,6 +3,7 @@ from tkinter.filedialog import *
 import fileinput
 import pyodbc
 from pyodbc import Error
+from lxml import etree
 
 l = []
 Full_results = []
@@ -13,23 +14,98 @@ author_list = []
 all_firstnames = []
 all_lastnames = []
 all_patr = []
-
+xml=[]
 
 def read():
     global l
     global source
+    global xml
     root = Tk()
     root.withdraw()
-    op = askopenfile(filetypes=[("Text files", "*.bib")])
-    l = op.read().splitlines()
-    for i in range(len(l)):  # Выявление источника экспорта путем поиска в файле адреса скопуса или категорий ВоС
-        if l[i].find("https://www.scopus.com") != -1:
-            source = "Scopus"
-            break
-        elif l[i].find("Web-of-Science") != -1:
-            source = "Web Of Science"
+    with open(askopenfilename(filetypes=[("Text files","*.xml *.bib")]), encoding='utf-8') as f:
+        if str(f).find(".bib")!=-1:
+            l = f.read().splitlines()
+            for i in range(len(l)):  # Выявление источника экспорта путем поиска в файле адреса скопуса или категорий ВоС
+                if l[i].find("https://www.scopus.com") != -1:
+                    source = "Scopus"
+                    break
+                elif l[i].find("Web-of-Science") != -1:
+                    source = "Web Of Science"
+        if str(f).find(".xml")!=-1:
+            xml = f.read()
+            source = "eLibrary"
+            #print(xml)
+ 
+def parseXML():
+    global xml
+    root = etree.fromstring(xml)
+    book_dict = []
+    books = []
+    indicators = []
+    ind_dict = []
+    for book in root.getchildren():
+        for elem in book.getchildren():
+          if len(elem.getchildren()) > 0 :
+            for sub_elem in elem.getchildren():
+              if len(sub_elem.getchildren()) > 0 :
+                for sub_elem1 in sub_elem.getchildren():
+                  if len(sub_elem1.getchildren()) > 0 :  
+                    for sub_elem2 in sub_elem1.getchildren():
+                      if len(sub_elem2.getchildren()) > 0 :  
+                        for sub_elem3 in sub_elem2.getchildren():
+                          if not sub_elem3.text:
+                            text = "None"
+                          else:
+                            text = sub_elem3.text
+                          #print(sub_elem.tag + " => " + text)
+                          book_dict.append(text)
+                          ind_dict.append(sub_elem3.tag)
+                        continue
+                      if not sub_elem2.text:
+                        text = "None"
+                      else:
+                        text = sub_elem2.text
+                      #print(sub_elem.tag + " => " + text)
+                      book_dict.append(text)
+                      ind_dict.append(sub_elem2.tag)
+                    continue
+                  if not sub_elem1.text:
+                    text = "None"
+                  else:
+                    text = sub_elem1.text
+                  #print(sub_elem.tag + " => " + text)
+                  book_dict.append(text)
+                  ind_dict.append(sub_elem1.tag)
+                continue
+              if not sub_elem.text:
+                text = "None"
+              else:
+                text = sub_elem.text
+              #print(sub_elem.tag + " => " + text)
+              book_dict.append(text)
+              ind_dict.append(sub_elem.tag)
+            continue
+          if not elem.text:
+                text = "None"
+          else:
+              text = elem.text
+          #print(elem.tag + " => " + text)
+          book_dict.append(text)
+          ind_dict.append(elem.tag)
+        
+        if book.tag == "item":
+            books.append(book_dict)
+            indicators.append(ind_dict)
+            ind_dict = []
+            book_dict = []
 
-
+    for i in range(len(books)):
+      for j in range(len(books[i])):
+        print(indicators[i][j] + ": " + books[i][j])
+      print(" ")
+    #return books
+ 
+ 
 def parse_WoS(n):
     global gl_indicators
     indicators = ['Author', 'Editor', 'Book-Group-Author', 'Title', 'Booktitle', 'Journal', 'Year', 'Volume', 'Number',
@@ -199,6 +275,8 @@ def split():
     global all_firstnames
     patr = []
     global all_patr
+    #if source == "eLibrary":
+        #for i in range()
     for k in range(len(Full_results)):
         tmp_authors = []
         if gl_ind_flags[k][0] == 1 and gl_indicators[0].upper() == "AUTHOR":  # Если есть автор
@@ -288,6 +366,7 @@ def output(): # Тут просто вывод общего списка  пок
     global all_patr
     global all_lastnames
     global all_firstnames
+    #if source == "eLibrary":
     for i in range(len(Full_results)):
         if gl_ind_flags[i][0] == 1 or gl_indicators[0].upper == "AUTHOR":
             for j in range(len(author_list[i])):
@@ -297,6 +376,7 @@ def output(): # Тут просто вывод общего списка  пок
             print(str(j) + " " + gl_indicators[j] + ":  " + Full_results[i][j])
         print("")
     print("Exported from " + source)
+
 
 
 
@@ -381,6 +461,8 @@ def main():
         parse_Scopus(3)
     elif source == "Web Of Science":
         parse_WoS(2)
+    elif source == "eLibrary":
+        parseXML()
     else:
         print("File Error!")
         return
